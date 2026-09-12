@@ -1,0 +1,6 @@
+name = "youju"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "."
+
+# 大模型 key 通过加密环境变量提供，不要写在这里：
+#   npx wrangler pages secret put DEEPSEEK_API_KEY --project-name youju
