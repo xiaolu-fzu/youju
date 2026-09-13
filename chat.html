@@ -84,6 +84,54 @@ textarea::placeholder{color:var(--t4)}
 .notice{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
   padding:16px 20px;font-size:var(--t-label);color:var(--t3);margin-bottom:18px}
 .notice b{color:var(--t1)}
+.loading{display:flex;align-items:center;gap:12px;font-size:var(--t-label);color:var(--t3)}
+.bar{width:120px;height:4px;border-radius:999px;background:var(--surface-2);overflow:hidden;flex:none}
+.bar i{display:block;height:100%;width:40%;background:var(--data);border-radius:999px;
+  transform:translateX(-100%);animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+
+/* ── 手机适配 ──
+ * 断点取 720px：再窄就把横向并排的元素改成纵向堆叠，
+ * 同时压低留白和字号 —— 手机上屏幕宽度是稀缺资源。
+ * 只改不需要动画的属性，避免触发重排动画。 */
+@media (max-width:720px){
+  header{padding:14px 16px}
+  h1{font-size:18px}
+  .hsub{width:100%;margin-left:0;text-align:left}
+  main{padding:14px 0}
+  .wrap{padding:0 14px}
+  .card{padding:16px 16px;border-radius:var(--r-md);margin-bottom:14px}
+  .tab{padding:8px 14px;font-size:14px}
+  .tab em{display:none}
+  .notice{padding:13px 15px;font-size:14px}
+  /* 题号与题目改为纵向：手机上横排会把题目挤成两三个字一行 */
+  .ask{flex-direction:column;align-items:flex-start;gap:10px;padding-bottom:14px;margin-bottom:16px}
+  .qno{padding:6px 12px;font-size:13px}
+  .qtext{font-size:19px;line-height:1.45}
+  .steps{padding-left:20px}
+  .steps::before{left:4px}
+  .step::before{left:-20px;top:7px;width:9px;height:9px}
+  .step.hi::before{width:11px;height:11px;left:-21px;top:6px}
+  .step{margin-bottom:16px}
+  .slabel{flex-wrap:wrap;gap:8px}
+  .slabel em{width:100%}
+  .ans{font-size:17px;line-height:1.85}
+  .meta{font-size:11px;line-height:1.7}
+  .hit .ht{font-size:14px}
+  footer{padding:10px 14px}
+  .frow{gap:8px}
+  textarea{height:46px;font-size:16px;padding:11px 13px}
+  #send{height:46px;padding:0 18px;font-size:15px}
+  .hint{font-size:11px;margin-top:7px;line-height:1.5}
+  dialog{width:96vw;max-height:88vh}
+  .dbody{padding:14px 16px;max-height:70vh}
+}
+
+@media (max-width:400px){
+  .qtext{font-size:17px}
+  .ans{font-size:16px}
+  .tab{padding:7px 11px;font-size:13px}
+}
 </style>
 </head>
 <body>
@@ -135,18 +183,38 @@ let cur = "a", bm = null, chunks = null, prompt = null;
 const cache = {};
 const $ = (s) => document.querySelector(s);
 
+/* 语料体积（从 manifest 读，用于加载提示里告诉用户"要下多少"）
+ * B 语料 10.8 MB，切过去要等一两秒 —— 没有提示的话用户会以为卡住了。 */
+let MANIFEST = {};
+fetch("data/manifest.json").then(r => r.json()).then(m => { MANIFEST = m; }).catch(() => {});
+
 async function load(id){
   if (cache[id]) { ({bm, chunks, prompt} = cache[id]); return; }
+  const mb = MANIFEST[id] ? (MANIFEST[id].bytes / 1048576).toFixed(1) : "?";
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<div class="loading"><span class="bar"><i></i></span>` +
+    `<span>正在下载语料并建立本地索引… 约 ${mb} MB</span></div>`;
+  $("#log").prepend(card);
   const t0 = performance.now();
-  const [data, pr] = await Promise.all([
-    fetch("data/" + CORPUS[id].file).then(r => r.json()),
-    fetch("data/" + CORPUS[id].prompt).then(r => r.text()),
-  ]);
-  chunks = data;
-  prompt = pr;
-  bm = new BM25(chunks.map(c => c.t));
-  cache[id] = {bm, chunks, prompt};
-  console.log(`语料 ${id}: ${chunks.length} 块，建索引 ${(performance.now()-t0).toFixed(0)}ms`);
+  try{
+    const [data, pr] = await Promise.all([
+      fetch("data/" + CORPUS[id].file).then(r => r.json()),
+      fetch("data/" + CORPUS[id].prompt).then(r => r.text()),
+    ]);
+    chunks = data;
+    prompt = pr;
+    bm = new BM25(chunks.map(c => c.t));
+    cache[id] = {bm, chunks, prompt};
+    const ms = performance.now() - t0;
+    card.querySelector(".loading").innerHTML =
+      `<span>已就绪：${chunks.length.toLocaleString()} 个切块，索引用时 ${ms.toFixed(0)} ms</span>`;
+    setTimeout(() => card.remove(), 1400);
+    console.log(`语料 ${id}: ${chunks.length} 块，建索引 ${ms.toFixed(0)}ms`);
+  }catch(e){
+    card.querySelector(".loading").innerHTML = "<span>语料下载失败：" + esc(e.message) + "</span>";
+    throw e;
+  }
 }
 
 function paintTabs(){
@@ -163,7 +231,8 @@ async function switchTo(id){
     `</div>`;
   $("#notice").querySelectorAll("[data-q]").forEach(b => b.onclick = () => { $("#msg").value = b.dataset.q; ask(); });
   $("#log").innerHTML = "";
-  await load(id);
+  $("#send").disabled = true;                  // 语料没就绪前不给发问
+  try { await load(id); } finally { $("#send").disabled = false; }
 }
 
 /* 极简 Markdown 渲染：只处理大模型最常用的三种（粗体 / 换行 / 无序列表）
