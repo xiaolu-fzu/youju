@@ -9,7 +9,11 @@
 | 站点 | 地址 | 说明 |
 |---|---|---|
 | 展示页 | https://xiaolu-fzu.github.io/youju/ | 讲清楚做了什么、实测数据 |
-| 问答页 | https://youju.pages.dev/chat.html | 可交互（需要后端，只有 Cloudflare 版有） |
+| **问答页** | **https://youju-doc.pages.dev/chat.html** | 可交互（需要后端，只有 Cloudflare 版有） |
+
+> 为什么有两个 Cloudflare 项目：最早建的 `youju` 项目，其生产别名卡在了旧版本
+> （部署里是新文件、但生产域名一直返回旧 HTML；实测 JS 与数据文件是新的，只有 HTML 旧）。
+> 排查过缓存、回滚、重新部署均无效，最后**重建项目**解决，新地址即 `youju-doc.pages.dev`。
 
 ## 三套语料
 
