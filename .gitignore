@@ -3,3 +3,8 @@ node_modules/
 dist/
 *.log
 .tmp/
+
+# 内部文档，不公开
+需求文档.md
+开发文档.md
+_*.md
