@@ -66,8 +66,19 @@ dialog::backdrop{background:rgba(0,0,0,.7)}
 .hit{border-bottom:1px solid var(--line);padding:14px 0}
 .hit:last-child{border-bottom:0}
 .hit .hh{font-size:var(--t-meta);font-family:var(--mono);color:var(--flow);margin-bottom:7px}
-.hit .ht{font-size:var(--t-label);line-height:1.75;color:var(--t3);
-  white-space:pre-wrap;max-height:9.5em;overflow:hidden}
+/* 召回原文完整显示。
+ * 曾经写了 max-height:9.5em; overflow:hidden —— 用户只能看到前 9 行半，
+ * 后面被无声裁掉，而"可核对"正是这个产品的核心承诺，截图都看不全就谈不上核对。
+ * 实测最长块只有 1,145 字（中位 420），对话框本身可滚动，全显示完全没有压力。 */
+.hit .ht{font-size:var(--t-label);line-height:1.8;color:var(--t3);
+  white-space:pre-wrap;word-break:break-word}
+.hit .hrow{display:flex;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.hit .hrow .hh{margin-bottom:0}
+.hit .cnt{font-size:var(--t-meta);font-family:var(--mono);color:var(--t4)}
+.hit .cp{margin-left:auto;background:none;border:1px solid var(--line);color:var(--t4);
+  border-radius:var(--r-sm);padding:3px 10px;cursor:pointer;font:inherit;font-size:11px}
+.hit .cp:hover{color:var(--flow);border-color:rgba(94,200,216,.45)}
+#dlgbody{overscroll-behavior:contain}
 footer{flex:none;border-top:1px solid var(--line);padding:16px 26px}
 .frow{max-width:1000px;margin:0 auto;display:flex;gap:12px;align-items:center}
 textarea{flex:1;background:var(--surface-2);border:1px solid var(--line);color:var(--t1);
@@ -274,12 +285,23 @@ function fillSources(el, picked){
   box.innerHTML = `命中来源：${esc(sources(cur, picked).join(" · "))} ` +
     `<button class="tab" data-src style="font-size:12px;padding:4px 11px;margin-left:8px">查看召回原文</button>`;
   box.querySelector("[data-src]").onclick = () => {
-    $("#dlgbody").innerHTML = picked.map(c => {
+    $("#dlgbody").innerHTML = picked.map((c, i) => {
       const head = cur === "c" ? `《${String(c.src||"").replace("688396_","")}》 ${c.s||""}`
         : cur === "b" ? `${c.c||""} ${c.y||""}年 ${c.s||""}` : `${c.y||""}年 ${c.s||""}`;
-      return `<div class="hit"><div class="hh">${esc(head)}</div>` +
-        `<div class="ht">${esc(String(c.t).slice(0,700))}</div></div>`;
+      const text = String(c.t);
+      return `<div class="hit"><div class="hrow">` +
+        `<span class="hh">#${i+1} ${esc(head)}</span>` +
+        `<span class="cnt">${text.length} 字</span>` +
+        `<button class="cp" data-copy="${i}">复制</button></div>` +
+        `<div class="ht">${esc(text)}</div></div>`;   // 全文，不截断
     }).join("");
+    $("#dlgbody").querySelectorAll("[data-copy]").forEach(b => {
+      b.onclick = () => {
+        navigator.clipboard.writeText(String(picked[+b.dataset.copy].t)).then(
+          () => { b.textContent = "已复制"; setTimeout(() => b.textContent = "复制", 1500); },
+          () => { b.textContent = "复制失败"; setTimeout(() => b.textContent = "复制", 1500); });
+      };
+    });
     $("#dlg").showModal();
   };
 }
