@@ -4,17 +4,16 @@
  * Python 版 bm25.tokenize 的做法：切出所有相邻两字组合（含英文数字块）。
  */
 export function tokenize(text){
-  const s = String(text).replace(/[^0-9A-Za-z\u4e00-\u9fff]+/g, " ").trim();
+  const s = String(text);
   const out = [];
-  for (const part of s.split(/\s+/)){
-    if (!part) continue;
-    if (/^[\u4e00-\u9fff]+$/.test(part)){
-      if (part.length === 1){ out.push(part); continue; }
-      for (let i = 0; i + 1 < part.length; i++) out.push(part.slice(i, i + 2));
-    } else {
-      out.push(part);
-    }
-  }
+  // 英文/数字：整词小写
+  for (const m of s.matchAll(/[0-9A-Za-z]+/g)) out.push(m[0].toLowerCase());
+  // 中文：把所有中文字符抽出来【再两两组合】—— 注意是跨标点、跨数字组合，
+  // 不是只在"纯中文片段"内组合。
+  // 曾经的写法用 /^[\u4e00-\u9fff]+$/ 判断纯中文片段，导致含数字的句子
+  //（如"华润微2021年面临的风险"）整句变成一个词，任何带年份的问题都检索不到。
+  const cjk = s.match(/[\u4e00-\u9fff]/g) || [];
+  for (let i = 0; i + 1 < cjk.length; i++) out.push(cjk[i] + cjk[i + 1]);
   return out;
 }
 

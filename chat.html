@@ -36,7 +36,8 @@ main{flex:1;overflow-y:auto;padding:26px}
 .tab em{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--t4);margin-left:7px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
   padding:20px 24px;margin-bottom:18px}
-.ask{display:flex;gap:16px;align-items:center}
+.ask{display:flex;gap:16px;align-items:center;padding-bottom:18px;margin:0 0 20px;
+  border-bottom:1px solid var(--line)}
 .qno{flex:none;font:600 var(--t-label)/1 var(--mono);color:var(--t1);
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.17);
   border-radius:999px;padding:8px 15px;white-space:nowrap}
@@ -175,52 +176,73 @@ function md(s){
   return t;
 }
 
-function render(q, picked, ans){
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+/* 每条问答一张卡，从提问那一刻就建好，检索完/生成完分别往里填。
+ * 之前是先建一张"检索中"的临时卡、拿到回答再删掉重建 —— 结果最终卡片上
+ * 没有题目，多问几个就分不清哪条回答对应哪个问题。 */
+let qn = 0;
+
+function newCard(q){
   const el = document.createElement("div");
   el.className = "card";
-  el.innerHTML = `<div class="steps">
-    <div class="step"><div class="slabel"><b>本地检索</b><em>BM25 · Top ${picked.length}</em></div>
-      <div class="meta">命中来源：${sources(cur, picked).join(" · ")}
-      <button class="tab" data-src style="font-size:12px;padding:4px 11px;margin-left:10px">查看召回原文</button></div>
-    </div>
-    <div class="step hi"><div class="slabel"><b>生成回答</b><em>由大模型基于上述原文作答</em></div>
-      <p class="ans">${md(ans)}</p>
-    </div>
-  </div>`;
-  el.querySelector("[data-src]").onclick = () => {
+  el.innerHTML = `<p class="ask"><span class="qno">问题 ${++qn}</span>` +
+    `<span class="qtext">${esc(q)}</span></p>` +
+    `<div class="steps">` +
+      `<div class="step" data-s1><div class="slabel"><b>本地检索</b>` +
+        `<em data-stage>进行中…</em></div>` +
+        `<div class="meta" data-srcbox hidden></div></div>` +
+      `<div class="step hi" data-s2 hidden><div class="slabel"><b>生成回答</b>` +
+        `<em>由大模型基于上述原文作答</em></div>` +
+        `<p class="ans"></p></div>` +
+    `</div>`;
+  return el;
+}
+
+function fillSources(el, picked){
+  const box = el.querySelector("[data-srcbox]");
+  box.hidden = false;
+  box.innerHTML = `命中来源：${esc(sources(cur, picked).join(" · "))} ` +
+    `<button class="tab" data-src style="font-size:12px;padding:4px 11px;margin-left:8px">查看召回原文</button>`;
+  box.querySelector("[data-src]").onclick = () => {
     $("#dlgbody").innerHTML = picked.map(c => {
       const head = cur === "c" ? `《${String(c.src||"").replace("688396_","")}》 ${c.s||""}`
         : cur === "b" ? `${c.c||""} ${c.y||""}年 ${c.s||""}` : `${c.y||""}年 ${c.s||""}`;
-      return `<div class="hit"><div class="hh">${head.replace(/</g,"&lt;")}</div>
-        <div class="ht">${String(c.t).slice(0,700).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</div></div>`;
+      return `<div class="hit"><div class="hh">${esc(head)}</div>` +
+        `<div class="ht">${esc(String(c.t).slice(0,700))}</div></div>`;
     }).join("");
     $("#dlg").showModal();
   };
-  $("#log").prepend(el);
 }
 
 async function ask(){
   const q = $("#msg").value.trim();
   if (!q || !bm) return;
   $("#send").disabled = true;
-  const picked = retrieve(bm, chunks, q, 8, {perYear: CORPUS[cur].perYear, perCompany: CORPUS[cur].perCompany});
-  const ctx = buildContext(cur, picked);
-  const el = document.createElement("div");
-  el.className = "card";
-  el.innerHTML = `<p class="ask"><span class="qno">提问</span><span class="qtext">${q.replace(/</g,"&lt;")}</span></p>
-    <div class="meta" style="border:0;padding-top:6px">检索中… 已召回 ${picked.length} 块</div>`;
-  $("#log").prepend(el);
   $("#msg").value = "";
+  const el = newCard(q);            // 卡片先建好，题目立刻可见
+  $("#log").prepend(el);
   try{
+    // ① 本地检索（纯前端，毫秒级）
+    const picked = retrieve(bm, chunks, q, 8,
+      {perYear: CORPUS[cur].perYear, perCompany: CORPUS[cur].perCompany});
+    el.querySelector("[data-stage]").textContent = `BM25 · Top ${picked.length}`;
+    fillSources(el, picked);
+    // ② 生成回答
+    el.querySelector("[data-s2]").hidden = false;
+    el.querySelector(".ans").textContent = "生成中…";
+    const ctx = buildContext(cur, picked);
     const r = await fetch("/api/llm", {
       method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({messages:[{role:"user", content: prompt.replace("{context}", ctx).replace("{question}", q)}]})
+      body: JSON.stringify({messages:[{role:"user",
+        content: prompt.replace("{context}", ctx).replace("{question}", q)}]})
     });
     const j = await r.json();
-    el.remove();
-    render(q, picked, (j.text || j.choices?.[0]?.message?.content || "（无回复）").trim());
+    const ans = (j.text || j.choices?.[0]?.message?.content || "").trim();
+    el.querySelector(".ans").innerHTML = j.error ? esc("生成失败：" + j.error) : (md(ans) || "（无回复）");
   }catch(e){
-    el.querySelector(".meta").textContent = "生成失败：" + e.message;
+    el.querySelector("[data-stage]").textContent = "检索失败";
+    el.querySelector(".meta").textContent = "出错了：" + e.message;
   }
   $("#send").disabled = false;
 }
