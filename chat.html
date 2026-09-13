@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<!-- build:202609130822 -->
-<meta name="build" content="202609130822">
+<!-- build:202609130908 -->
+<meta name="build" content="202609130908">
 <title>文档问答 · 试试</title>
 <style>
 :root{
@@ -81,6 +81,21 @@ dialog::backdrop{background:rgba(0,0,0,.7)}
   border-radius:var(--r-sm);padding:3px 10px;cursor:pointer;font:inherit;font-size:11px}
 .hit .cp:hover{color:var(--flow);border-color:rgba(94,200,216,.45)}
 #dlgbody{overscroll-behavior:contain}
+
+/* 「查看召回原文」按钮。
+ * 原来直接复用 .tab 类 + 内联样式压到 12px，混在一行小字里几乎看不见 ——
+ * 而它是整条链路里唯一能证明「答案有据可查」的入口，必须一眼就能找到。 */
+.srcbtn{display:inline-flex;align-items:center;gap:8px;
+  font:600 15px/1 var(--ui);color:var(--flow);
+  background:var(--flow-soft);border:1px solid rgba(94,200,216,.5);
+  border-radius:999px;padding:9px 18px;cursor:pointer;
+  margin-left:4px;vertical-align:middle;white-space:nowrap}
+.srcbtn:hover{background:rgba(94,200,216,.24);border-color:var(--flow);
+  box-shadow:0 0 0 3px rgba(94,200,216,.12)}
+.srcbtn .ico{font-size:16px;line-height:1}
+.srcbtn .num{font-family:var(--mono);font-size:13px;color:var(--flow);
+  background:rgba(94,200,216,.18);border-radius:999px;padding:2px 8px;margin-left:2px}
+.srcline{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 footer{flex:none;border-top:1px solid var(--line);padding:16px 26px}
 .frow{max-width:1000px;margin:0 auto;display:flex;gap:12px;align-items:center}
 textarea{flex:1;background:var(--surface-2);border:1px solid var(--line);color:var(--t1);
@@ -130,6 +145,8 @@ textarea::placeholder{color:var(--t4)}
   .slabel em{width:100%}
   .ans{font-size:17px;line-height:1.85}
   .meta{font-size:11px;line-height:1.7}
+  .srcline{gap:8px}
+  .srcbtn{width:100%;justify-content:center;font-size:15px;padding:11px 16px;margin-left:0}
   .hit .ht{font-size:14px}
   footer{padding:10px 14px}
   .frow{gap:8px}
@@ -284,8 +301,12 @@ function newCard(q){
 function fillSources(el, picked){
   const box = el.querySelector("[data-srcbox]");
   box.hidden = false;
-  box.innerHTML = `命中来源：${esc(sources(cur, picked).join(" · "))} ` +
-    `<button class="tab" data-src style="font-size:12px;padding:4px 11px;margin-left:8px">查看召回原文</button>`;
+  box.innerHTML = `<div class="srcline">` +
+    `<span>命中来源：${esc(sources(cur, picked).join(" · "))}</span>` +
+    `<button class="srcbtn" data-src>` +
+      `<span class="ico">🔍</span>查看召回原文` +
+      `<span class="num">${picked.length}</span>` +
+    `</button></div>`;
   box.querySelector("[data-src]").onclick = () => {
     $("#dlgbody").innerHTML = picked.map((c, i) => {
       const head = cur === "c" ? `《${String(c.src||"").replace("688396_","")}》 ${c.s||""}`
